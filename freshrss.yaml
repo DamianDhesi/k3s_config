@@ -1,0 +1,106 @@
+# FreshRSS (1 replica, Port 30000, local-path storage)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: freshrss
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: freshrss-data
+  namespace: freshrss
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: freshrss-extensions
+  namespace: freshrss
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 200Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: freshrss
+  namespace: freshrss
+spec:
+  replicas: 1 
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: freshrss
+  template:
+    metadata:
+      labels:
+        app: freshrss
+    spec:
+      nodeSelector:
+        workerType: worker-01
+      containers:
+        - name: freshrss
+          image: freshrss/freshrss:latest
+          ports:
+            - name: http
+              containerPort: 80
+          env:
+            - name: TZ
+              value: "America/Los_Angeles"
+            - name: CRON_MIN          # built-in cron: refresh feeds at :01 and :31
+              value: "1,31"
+          volumeMounts:
+            - name: data
+              mountPath: /var/www/FreshRSS/data
+            - name: extensions
+              mountPath: /var/www/FreshRSS/extensions
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: freshrss-data
+        - name: extensions
+          persistentVolumeClaim:
+            claimName: freshrss-extensions
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: freshrss
+  namespace: freshrss
+spec:
+  type: NodePort
+  selector:
+    app: freshrss
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30000   # K3s default NodePort range is 30000-32767
