@@ -47,7 +47,7 @@ spec:
         app: freshrss
     spec:
       nodeSelector:
-        workerType: worker-01
+        workerType: control
       containers:
         - name: freshrss
           image: freshrss/freshrss:latest
